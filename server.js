@@ -24,9 +24,17 @@ app.post('/register-token', (req, res) => {
 });
 
 app.post('/send-notification', async (req, res) => {
-  const { phone, title, body } = req.body;
+  const { token, title, body, tokens } = req.body;
   try {
-    const token = fcmTokens[phone];
+    if (tokens && Array.isArray(tokens)) {
+      const messages = tokens.map(t => ({
+        token: t,
+        notification: { title, body },
+        android: { notification: { channelId: 'superburger', title, body } }
+      }));
+      const result = await admin.messaging().sendAll(messages);
+      return res.json({ success: true, sent: result.successCount });
+    }
     if (!token) return res.json({ success: false });
     await admin.messaging().send({
       token: token,
@@ -35,7 +43,8 @@ app.post('/send-notification', async (req, res) => {
     });
     res.json({ success: true });
   } catch (e) {
-    res.json({ success: false });
+    console.log('Notification error:', e.message);
+    res.json({ success: false, error: e.message });
   }
 });
 

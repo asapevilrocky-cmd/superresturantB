@@ -9,9 +9,9 @@ app.use(bodyParser.json());
 
 admin.initializeApp({
   credential: admin.credential.cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+    project_id: process.env.FIREBASE_PROJECT_ID,
+    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+    private_key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
   })
 });
 
@@ -26,6 +26,7 @@ app.post('/register-token', (req, res) => {
 app.post('/send-notification', async (req, res) => {
   const { token, title, body, tokens } = req.body;
   try {
+    // If tokens array provided (broadcast)
     if (tokens && Array.isArray(tokens)) {
       const messages = tokens.map(t => ({
         token: t,
@@ -35,6 +36,7 @@ app.post('/send-notification', async (req, res) => {
       const result = await admin.messaging().sendAll(messages);
       return res.json({ success: true, sent: result.successCount });
     }
+    // Single token (old method)
     if (!token) return res.json({ success: false });
     await admin.messaging().send({
       token: token,

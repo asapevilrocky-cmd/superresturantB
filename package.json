@@ -30,7 +30,6 @@
     "firebase-admin": "^12.7.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-recaptcha-that-works": "^2.0.0",
-    "telnyx": "^2.1.1"
+    "react-native-recaptcha-that-works": "^2.0.0"
   }
 }

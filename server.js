@@ -126,31 +126,22 @@ app.post('/verify-otp', async (req, res) => {
 });
 
 // Vonage SMS setup
-const VONAGE_API_KEY = process.env.VONAGE_API_KEY || '';
-const VONAGE_API_SECRET = process.env.VONAGE_API_SECRET || '';
-const VONAGE_FROM = process.env.VONAGE_FROM || 'SuperBurger';
+const VONAGE_API_KEY = '310e8295';
+const VONAGE_API_SECRET = 'vGh1zWa2E66FvhLrPCb@RDX';
+const VONAGE_FROM = '970597403765';
 
 async function sendVonageSms(to, text) {
   const https = require('https');
+  const querystring = require('querystring');
   let normalized = to.replace(/^\+/, '').replace(/[^0-9]/g, '');
-  const data = JSON.stringify({ from: VONAGE_FROM, to: normalized, text });
-  const auth = Buffer.from(`${VONAGE_API_KEY}:${VONAGE_API_SECRET}`).toString('base64');
+  const params = querystring.stringify({ api_key: VONAGE_API_KEY, api_secret: VONAGE_API_SECRET, from: VONAGE_FROM, to: normalized, text });
 
   return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'rest.nexmo.com',
-      path: '/sms/json',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` }
-    };
-    const req = https.request(options, (res) => {
+    https.get(`https://rest.nexmo.com/sms/json?${params}`, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
       res.on('end', () => resolve({ status: res.statusCode, body }));
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
+    }).on('error', reject);
   });
 }
 

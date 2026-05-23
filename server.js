@@ -9,10 +9,15 @@ const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
 const TWILIO_AUTH = Buffer.from(TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN).toString('base64');
 
 async function sendTwilioSms(to, text) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    console.log('⚠️ Twilio credentials not configured');
+    return { status: 500, body: 'Twilio not configured' };
+  }
   const https = require('https');
   const qs = require('querystring');
   let normalized = to.startsWith('+') ? to : '+' + to;
   const data = qs.stringify({ From: TWILIO_FROM, To: normalized, Body: text });
+  console.log('📤 Sending Twilio SMS:', { from: TWILIO_FROM, to: normalized, text: text.substring(0, 30) + '...' });
   return new Promise((resolve) => {
     const req = https.request({
       hostname: 'api.twilio.com', port: 443,
@@ -27,7 +32,7 @@ async function sendTwilioSms(to, text) {
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
-        console.log('📨 Twilio response:', res.statusCode);
+        console.log('📨 Twilio status:', res.statusCode, 'body:', body.substring(0, 200));
         resolve({ status: res.statusCode, body });
       });
     });

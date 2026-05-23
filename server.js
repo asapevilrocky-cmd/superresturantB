@@ -1,11 +1,40 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-let twilio;
-try {
-  twilio = require('twilio');
-} catch(e) {
-  console.log('⚠️ twilio package not installed, SMS will not work');
+
+// Twilio SMS setup
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
+const TWILIO_AUTH = Buffer.from(TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN).toString('base64');
+
+async function sendTwilioSms(to, text) {
+  const https = require('https');
+  const qs = require('querystring');
+  let normalized = to.startsWith('+') ? to : '+' + to;
+  const data = qs.stringify({ From: TWILIO_FROM, To: normalized, Body: text });
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'api.twilio.com', port: 443,
+      path: '/2010-04-01/Accounts/' + TWILIO_ACCOUNT_SID + '/Messages.json',
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + TWILIO_AUTH,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        console.log('📨 Twilio response:', res.statusCode);
+        resolve({ status: res.statusCode, body });
+      });
+    });
+    req.on('error', (e) => { console.log('❌ Twilio error:', e.message); resolve({ status: 500, body: e.message }); });
+    req.write(data);
+    req.end();
+  });
 }
 
 const app = express();
@@ -130,35 +159,6 @@ app.post('/verify-otp', async (req, res) => {
     res.json({ success: false, error: e.message });
   }
 });
-
-// Twilio SMS setup
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
-if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-  console.log('⚠️ TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set, SMS will fail');
-}
-const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && twilio ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
-
-async function sendTwilioSms(to, text) {
-  if (!twilio || !twilioClient) {
-    console.log('⚠️ Twilio not available. Would send SMS:', { to, text });
-    return { status: 200, body: 'simulated' };
-  }
-  let normalized = to.startsWith('+') ? to : '+' + to;
-  try {
-    const message = await twilioClient.messages.create({
-      body: text,
-      from: TWILIO_FROM,
-      to: normalized
-    });
-    console.log('✅ Twilio message sent:', message.sid);
-    return { status: 200, body: message.sid };
-  } catch(e) {
-    console.log('❌ Twilio error:', e.message);
-    return { status: 500, body: e.message };
-  }
-}
 
 app.post('/send-order-sms', async (req, res) => {
   const { phone, name } = req.body;

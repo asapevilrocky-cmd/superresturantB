@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const twilio = require('twilio');
 
 const app = express();
 app.use(cors());
@@ -94,8 +95,8 @@ app.post('/send-otp', async (req, res) => {
     console.log('🔑 OTP stored:', code);
 
     const text = `كود التحقق الخاص بك: ${code}\nصلاحية الكود 5 دقائق - سوبر برجر`;
-    const result = await sendVonageSms(phone, text);
-    console.log('📨 Vonage response:', result.status, result.body);
+    const result = await sendTwilioSms(phone, text);
+    console.log('📨 Twilio response:', result.status, result.body);
     if (result.status !== 200) return res.json({ success: false, error: 'فشل إرسال SMS' });
     res.json({ success: true });
   } catch(e) {
@@ -125,24 +126,30 @@ app.post('/verify-otp', async (req, res) => {
   }
 });
 
-// Vonage SMS setup
-const VONAGE_API_KEY = '310e8295';
-const VONAGE_API_SECRET = 'vGh1zWa2E66FvhLrPCb@RDX';
-const VONAGE_FROM = '970597403765';
+// Twilio SMS setup
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
+if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+  console.log('⚠️ TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set, SMS will fail');
+}
+const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
 
-async function sendVonageSms(to, text) {
-  const https = require('https');
-  const querystring = require('querystring');
-  let normalized = to.replace(/^\+/, '').replace(/[^0-9]/g, '');
-  const params = querystring.stringify({ api_key: VONAGE_API_KEY, api_secret: VONAGE_API_SECRET, from: VONAGE_FROM, to: normalized, text });
-
-  return new Promise((resolve, reject) => {
-    https.get(`https://rest.nexmo.com/sms/json?${params}`, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => resolve({ status: res.statusCode, body }));
-    }).on('error', reject);
-  });
+async function sendTwilioSms(to, text) {
+  if (!twilioClient) return { status: 500, body: 'Twilio not configured' };
+  let normalized = to.startsWith('+') ? to : '+' + to;
+  try {
+    const message = await twilioClient.messages.create({
+      body: text,
+      from: TWILIO_FROM,
+      to: normalized
+    });
+    console.log('✅ Twilio message sent:', message.sid);
+    return { status: 200, body: message.sid };
+  } catch(e) {
+    console.log('❌ Twilio error:', e.message);
+    return { status: 500, body: e.message };
+  }
 }
 
 app.post('/send-order-sms', async (req, res) => {
@@ -151,11 +158,10 @@ app.post('/send-order-sms', async (req, res) => {
   if (!phone) return res.json({ success: false, error: 'رقم الهاتف مطلوب' });
   try {
     const text = `مرحباً ${name || 'عميلنا'}! 🍔\nتم استلام طلبك الأول من سوبر برجر!\nسيتم تجهيزه قريباً.\nشكراً لثقتك ❤️`;
-    const result = await sendVonageSms(phone, text);
-    console.log('📨 Vonage response:', result.status, result.body);
+    const result = await sendTwilioSms(phone, text);
     res.json({ success: result.status === 200 });
   } catch(e) {
-    console.log('❌ Vonage SMS error:', e.message);
+    console.log('❌ Twilio SMS error:', e.message);
     res.json({ success: false, error: e.message });
   }
 });

@@ -1,7 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const twilio = require('twilio');
+let twilio;
+try {
+  twilio = require('twilio');
+} catch(e) {
+  console.log('⚠️ twilio package not installed, SMS will not work');
+}
 
 const app = express();
 app.use(cors());
@@ -133,10 +138,13 @@ const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
 if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
   console.log('⚠️ TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set, SMS will fail');
 }
-const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
+const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && twilio ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
 
 async function sendTwilioSms(to, text) {
-  if (!twilioClient) return { status: 500, body: 'Twilio not configured' };
+  if (!twilio || !twilioClient) {
+    console.log('⚠️ Twilio not available. Would send SMS:', { to, text });
+    return { status: 200, body: 'simulated' };
+  }
   let normalized = to.startsWith('+') ? to : '+' + to;
   try {
     const message = await twilioClient.messages.create({

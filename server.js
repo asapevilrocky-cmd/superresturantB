@@ -135,8 +135,13 @@ app.post('/send-otp', async (req, res) => {
 
     const text = `كود التحقق الخاص بك: ${code}\nصلاحية الكود 5 دقائق - سوبر برجر`;
     const result = await sendTwilioSms(phone, text);
-    console.log('📨 Twilio response:', result.status, result.body);
-    if (result.status !== 200) return res.json({ success: false, error: 'فشل إرسال SMS' });
+    console.log('📨 Twilio response:', result.status, typeof result.body === 'string' ? result.body.substring(0, 300) : JSON.stringify(result.body));
+    if (result.status !== 200 && result.status !== 201) {
+      let errMsg = 'فشل إرسال SMS';
+      try { const b = JSON.parse(result.body); if (b.message) errMsg += ': ' + b.message; } catch(e) {}
+      console.log('❌ Twilio error details:', result.body);
+      return res.json({ success: false, error: errMsg });
+    }
     res.json({ success: true });
   } catch(e) {
     console.log('❌ Send OTP error:', e.message);
@@ -172,7 +177,7 @@ app.post('/send-order-sms', async (req, res) => {
   try {
     const text = `مرحباً ${name || 'عميلنا'}! 🍔\nتم استلام طلبك الأول من سوبر برجر!\nسيتم تجهيزه قريباً.\nشكراً لثقتك ❤️`;
     const result = await sendTwilioSms(phone, text);
-    res.json({ success: result.status === 200 });
+    res.json({ success: result.status === 200 || result.status === 201 });
   } catch(e) {
     console.log('❌ Twilio SMS error:', e.message);
     res.json({ success: false, error: e.message });

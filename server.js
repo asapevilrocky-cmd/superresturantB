@@ -2,36 +2,67 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const twilio = require('twilio');
 
-// Twilio setup using official SDK
+// Try to use official Twilio SDK; fall back to custom HTTPS if module missing
+let twilioLib = null;
+try { twilioLib = require('twilio'); } catch(e) { console.log('⚠️ twilio module not found, using HTTPS fallback'); }
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_FROM;
-let twilioClient = null;
-if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-  twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-}
 
 async function sendTwilioSms(to, text) {
-  if (!twilioClient) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     console.log('⚠️ Twilio credentials not configured');
     return { status: 500, body: 'Twilio not configured' };
   }
   let normalized = to.startsWith('+') ? to : '+' + to;
   console.log('📤 Sending Twilio SMS:', { from: TWILIO_FROM, to: normalized, text: text.substring(0, 30) + '...' });
-  try {
-    const message = await twilioClient.messages.create({
-      from: TWILIO_FROM,
-      to: normalized,
-      body: text
-    });
-    console.log('📨 Twilio success:', message.sid);
-    return { status: 200, body: message.sid };
-  } catch(e) {
-    console.log('❌ Twilio error:', e.message);
-    return { status: 500, body: e.message };
+
+  // Use official SDK if available
+  if (twilioLib) {
+    try {
+      const client = twilioLib(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+      const message = await client.messages.create({
+        from: TWILIO_FROM,
+        to: normalized,
+        body: text
+      });
+      console.log('📨 Twilio success:', message.sid);
+      return { status: 200, body: message.sid };
+    } catch(e) {
+      console.log('❌ Twilio error:', e.message);
+      return { status: 500, body: e.message };
+    }
   }
+
+  // Fallback: custom HTTPS client
+  const https = require('https');
+  const qs = require('querystring');
+  const auth = Buffer.from(TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN).toString('base64');
+  const data = qs.stringify({ From: TWILIO_FROM, To: normalized, Body: text });
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'api.twilio.com', port: 443,
+      path: '/2010-04-01/Accounts/' + TWILIO_ACCOUNT_SID + '/Messages.json',
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + auth,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        console.log('📨 Twilio status:', res.statusCode);
+        resolve({ status: res.statusCode, body });
+      });
+    });
+    req.on('error', (e) => { console.log('❌ Twilio error:', e.message); resolve({ status: 500, body: e.message }); });
+    req.write(data);
+    req.end();
+  });
 }
 
 const app = express();

@@ -248,6 +248,105 @@ app.post('/verify-otp', async (req, res) => {
   }
 });
 
+app.post('/place-order', async (req, res) => {
+  const { userId, name, phone, fcmToken, items, couponId } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.json({ success: false, error: 'السلة فارغة' });
+  }
+  if (!db) return res.json({ success: false, error: 'Firebase not configured' });
+
+  try {
+    // Fetch current menu prices from Firestore
+    const menuSnap = await db.collection('menu').get();
+    const menuMap = {};
+    menuSnap.docs.forEach(d => { const d2 = d.data(); menuMap[d2.name] = d2.price; });
+
+    // Also consider the built-in menuData from the client fallback
+    // Validate each item's price server-side
+    let serverTotal = 0;
+    const validatedItems = [];
+    for (const item of items) {
+      const menuPrice = menuMap[item.name];
+      const basePrice = menuPrice !== undefined ? menuPrice : (item.price || 0);
+      const optionsTotal = (item.selectedOptions || []).reduce((s, o) => s + (o.price || 0), 0);
+      const finalPrice = basePrice + optionsTotal;
+      serverTotal += finalPrice;
+      validatedItems.push({
+        name: item.name,
+        price: basePrice,
+        finalPrice,
+        selectedOptions: item.selectedOptions || []
+      });
+    }
+
+    // Apply coupon if provided
+    let appliedDiscount = 0;
+    let finalCouponId = null;
+    if (couponId) {
+      const couponDoc = await db.collection('coupons').doc(couponId).get();
+      if (couponDoc.exists) {
+        const couponData = couponDoc.data();
+        if (couponData.active !== false) {
+          if (!couponData.expiresAt || new Date(couponData.expiresAt) >= new Date()) {
+            if (!couponData.maxUses || (couponData.currentUses || 0) < couponData.maxUses) {
+              // Check per-user limit
+              if (couponData.maxPerUser > 0 && userId) {
+                const userCount = (couponData.usedBy && couponData.usedBy[userId]) || 0;
+                if (userCount >= couponData.maxPerUser) {
+                  return res.json({ success: false, error: 'لقد استنفذت حد استخدام هذا الكوبون' });
+                }
+              }
+              appliedDiscount = couponData.discount || 0;
+              finalCouponId = couponId;
+            }
+          }
+        }
+      }
+    }
+
+    const finalTotal = appliedDiscount > 0
+      ? Math.round(serverTotal * (100 - appliedDiscount) / 100)
+      : serverTotal;
+
+    const orderRef = await db.collection('orders').add({
+      userId: userId || null,
+      userName: name || 'ضيف',
+      name: name || 'ضيف',
+      phone: phone || '00000000',
+      fcmToken: fcmToken || null,
+      deliveryLocation: '',
+      orderType: 'pickup',
+      items: validatedItems,
+      total: finalTotal,
+      serverTotal,
+      discount: appliedDiscount,
+      couponId: finalCouponId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+
+    // Increment coupon usage
+    if (finalCouponId) {
+      try {
+        const updateData = {
+          currentUses: admin.firestore.FieldValue.increment(1)
+        };
+        if (userId) {
+          updateData[`usedBy.${userId}`] = admin.firestore.FieldValue.increment(1);
+        }
+        await db.collection('coupons').doc(finalCouponId).update(updateData);
+      } catch(e) {
+        console.log('Coupon increment error:', e.message);
+      }
+    }
+
+    res.json({ success: true, orderId: orderRef.id, total: finalTotal });
+  } catch(e) {
+    console.log('Place order error:', e.message);
+    res.json({ success: false, error: e.message });
+  }
+});
+
 app.post('/send-order-sms', async (req, res) => {
   const { phone, name } = req.body;
   if (!phone) return res.json({ success: false, error: 'رقم الهاتف مطلوب' });

@@ -46,6 +46,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Log all requests
+app.use((req, res, next) => {
+  console.log('🌐', req.method, req.path);
+  next();
+});
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
 let db = null;
 
 const FIREBASE_PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY || '';

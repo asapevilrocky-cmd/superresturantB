@@ -103,7 +103,7 @@ app.post('/send-notification', async (req, res) => {
       const messages = tokens.map(t => ({
         token: t,
         notification: { title, body },
-        android: { notification: { channelId: 'superburger', title, body } }
+        android: { notification: { title, body } }
       }));
       const result = await admin.messaging().sendAll(messages);
       return res.json({ success: true, sent: result.successCount });
@@ -125,7 +125,7 @@ app.post('/send-notification', async (req, res) => {
     await admin.messaging().send({
       token: fcmToken,
       notification: { title, body },
-      android: { notification: { channelId: 'superburger', title, body } }
+      android: { notification: { title, body } }
     });
     res.json({ success: true });
   } catch (e) {

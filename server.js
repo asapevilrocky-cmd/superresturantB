@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
+process.on('uncaughtException', (e) => { console.log('💥 Uncaught:', e.message, e.stack); setTimeout(() => process.exit(1), 1000); });
+process.on('unhandledRejection', (e) => { console.log('💥 Unhandled rejection:', e.message, e.stack); });
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';

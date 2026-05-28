@@ -3,44 +3,21 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// Try to use official Twilio SDK; fall back to custom HTTPS if module missing
-let twilioLib = null;
-try { twilioLib = require('twilio'); } catch(e) { console.log('⚠️ twilio module not found, using HTTPS fallback'); }
-
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM = process.env.TWILIO_FROM;
+const TWILIO_FROM = process.env.TWILIO_FROM || '+16507896851';
 
 async function sendTwilioSms(to, text) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     console.log('⚠️ Twilio credentials not configured');
     return { status: 500, body: 'Twilio not configured' };
   }
-  let normalized = to.startsWith('+') ? to : '+' + to;
-  console.log('📤 Sending Twilio SMS:', { from: TWILIO_FROM, to: normalized, text: text.substring(0, 30) + '...' });
-
-  // Use official SDK if available
-  if (twilioLib) {
-    try {
-      const client = twilioLib(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-      const message = await client.messages.create({
-        from: TWILIO_FROM,
-        to: normalized,
-        body: text
-      });
-      console.log('📨 Twilio success:', message.sid);
-      return { status: 200, body: message.sid };
-    } catch(e) {
-      console.log('❌ Twilio error:', e.message);
-      return { status: 500, body: e.message };
-    }
-  }
-
-  // Fallback: custom HTTPS client
   const https = require('https');
   const qs = require('querystring');
   const auth = Buffer.from(TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN).toString('base64');
+  let normalized = to.startsWith('+') ? to : '+' + to;
   const data = qs.stringify({ From: TWILIO_FROM, To: normalized, Body: text });
+  console.log('📤 Sending Twilio SMS:', { from: TWILIO_FROM, to: normalized });
   return new Promise((resolve) => {
     const req = https.request({
       hostname: 'api.twilio.com', port: 443,
@@ -200,7 +177,9 @@ app.post('/send-otp', async (req, res) => {
 
     if (result.status !== 200 && result.status !== 201) {
       console.log('❌ Twilio error details:', result.body);
-      return res.json({ success: false, error: 'فشل إرسال SMS، تحقق من رقم الهاتف' });
+      let errMsg = 'فشل إرسال SMS';
+      try { const b = JSON.parse(result.body); if (b.message) errMsg += ': ' + b.message; } catch(e) {}
+      return res.json({ success: false, error: errMsg });
     }
     res.json({ success: true });
   } catch(e) {

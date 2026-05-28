@@ -32,7 +32,7 @@ async function sendTwilioSms(to, text) {
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
-        console.log('📨 Twilio status:', res.statusCode);
+        console.log('📨 Twilio status:', res.statusCode, 'body:', body.substring(0, 300));
         resolve({ status: res.statusCode, body });
       });
     });

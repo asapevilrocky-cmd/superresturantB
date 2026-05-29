@@ -83,6 +83,10 @@ if (FIREBASE_PRIVATE_KEY) {
 
 app.get('/', (req, res) => res.json({ status: 'running', endpoints: ['/send-otp', '/verify-otp', '/send-notification', '/register-token'] }));
 
+app.get('/delete-account', (req, res) => {
+  res.send(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>حذف الحساب</title><style>body{font-family:sans-serif;background:#111;color:#fff;max-width:600px;margin:50px auto;padding:20px;line-height:1.8}h1{color:#d4a54a}a{color:#d4a54a}</style></head><body><h1>حذف الحساب - سوبر برجر</h1><p>لحذف حسابك وبياناتك الشخصية نهائياً من تطبيق سوبر برجر، يرجى التواصل عبر واتساب:</p><p><a href="https://wa.me/970593221500">📱 واتساب: 0593221500</a></p><p>سيتم حذف الحساب وجميع البيانات خلال 7 أيام عمل.</p></body></html>`);
+});
+
 app.post('/register-token', async (req, res) => {
   const { token, phone } = req.body;
   if (!db) return res.json({ success: false, error: 'Firebase not configured' });
